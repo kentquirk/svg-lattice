@@ -56,9 +56,10 @@ colors = {
 
 
 class Element(object):
-    def __init__(self, pt):
+    def __init__(self, pt, tween_factor):
         self.path = [f"M{_sc(pt.x)},{_sc(pt.y)}"]
         self.lastpt = pt
+        self.tween_factor = tween_factor
 
     def add_lineto(self, pt):
         self.path.append(f"L{_sc(pt.x)},{_sc(pt.y)}")
@@ -89,11 +90,10 @@ class Element(object):
     def add_arc_ctr(self, pt, ctr):
         # Control points are both tweened between the points and the center
         # point with the same tween factor.
-        tween_factor = 0.5
         ctr = ctr.clone()
 
-        ctrl1 = self.lastpt.tween(ctr, tween_factor)
-        ctrl2 = pt.tween(ctr, tween_factor)
+        ctrl1 = self.lastpt.tween(ctr, self.tween_factor)
+        ctrl2 = pt.tween(ctr, self.tween_factor)
 
         self.path.append(
             f"C{_sc(ctrl1.x)},{_sc(ctrl1.y)} {_sc(ctrl2.x)},{_sc(ctrl2.y)} {_sc(pt.x)},{_sc(pt.y)}"

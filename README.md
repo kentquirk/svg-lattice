@@ -23,6 +23,7 @@ Help:
 
 ```
 usage: lattice.py [-h] [--width WIDTH] [--height HEIGHT] [--cellsize CELLSIZE] [--bordersize BORDERSIZE] [--n N] [--seed SEED] [--printboard] [--filename FILENAME] [--fillcolor FILLCOLOR] [--nosolo] [--style {wide,medium,thin}]
+                  [--endcap {point,round,square}]
 
 Generate a lattice.
 
@@ -41,5 +42,7 @@ optional arguments:
                         fill color of the strokes (none)
   --nosolo              don't allow neighborhoods of only one cell
   --style {wide,medium,thin}
-                        style of the strokes
+                        style of the strokes (medium)
+  --endcap {point,round,square}
+                        style of the endcaps (round)
 ```

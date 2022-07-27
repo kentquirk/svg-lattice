@@ -40,26 +40,32 @@ WEST = Direction(x=-1, y=0)
 
 
 class Grid(object):
-    def __init__(self, aspect):
+    def __init__(self, style, endcap):
         # the order of these matters later
         self.directions = [NORTH, SOUTH, EAST, WEST]
         self.size = 12
         self.S = self.size
-        if aspect == "thin":
+        if style == "thin":
             self.A = 0
             self.B = 4
             self.C = 6
             self.D = 8
-        if aspect == "medium":
+        if style == "medium":
             self.A = 0
             self.B = 3
             self.C = 6
             self.D = 9
-        if aspect == "wide":
+        if style == "wide":
             self.A = 0
             self.B = 2
             self.C = 6
             self.D = 10
+        if endcap == "point":
+            self.tween_factor = 0.01
+        elif endcap == "round":
+            self.tween_factor = 0.5
+        elif endcap == "square":
+            self.tween_factor = 0.99
         self.setup_shortcuts()
 
     def setup_shortcuts(self):
@@ -173,7 +179,8 @@ class Stroke(object):
         return self.segments[-1].to
 
     def generate_path(self, scale, offset):
-        e = Element(self.fr().scaled(scale, offset))
+        # tween factor never hits 0 or 1 because we want the laser head not to stop
+        e = Element(self.fr().scaled(scale, offset), grid.tween_factor)
         for s in self.segments:
             to = s.to.scaled(scale, offset)
             if s.op == "line":
@@ -667,14 +674,21 @@ if __name__ == "__main__":
         dest="style",
         default="medium",
         choices=["wide", "medium", "thin"],
-        help="style of the strokes",
+        help="style of the strokes (medium)",
+    )
+    parser.add_argument(
+        "--endcap",
+        dest="endcap",
+        default="round",
+        choices=["point", "round", "square"],
+        help="style of the endcaps (round)",
     )
 
     args = parser.parse_args()
 
     if args.seed != 0:
         random.seed(args.seed)
-    grid = Grid(args.style)
+    grid = Grid(args.style, args.endcap)
     drawing = Board(
         grid=grid, width=args.width, height=args.height, neighborhoods=args.n
     )
