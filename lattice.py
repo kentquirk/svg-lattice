@@ -433,14 +433,18 @@ class Square(object):
 
 
 class Board(object):
-    def __init__(self, width=20, height=20, nseeds=0):
+    def __init__(self, width=20, height=20, neighborhoods=0):
         self.width = width
         self.height = height
-        if nseeds == 0:
-            self.nseeds = int(self.width * self.height / 5)
+        self.num_filled = 0
+        if neighborhoods == 0:
+            self.neighborhoods = int(self.width * self.height / 5)
         else:
-            self.nseeds = nseeds
+            self.neighborhoods = neighborhoods
         self.empty_board()
+
+    def density(self):
+        return self.num_filled / (self.width * self.height)
 
     def empty_board(self):
         self.board = []
@@ -452,10 +456,12 @@ class Board(object):
     def generate_lattice(self):
         self.empty_board()
 
-        for i in range(self.nseeds):
+        while self.num_filled < self.neighborhoods:
             x = random.randint(0, self.width - 1)
             y = random.randint(0, self.height - 1)
-            self.board[y][x].occupied = True
+            if not self.board[y][x].occupied:
+                self.board[y][x].occupied = True
+                self.num_filled += 1
 
     def can_connect(self, x, y, dir):
         nx = x + dir.x
@@ -476,6 +482,7 @@ class Board(object):
         self.board[y][x].connections.append(dir)
         self.board[y + dir.y][x + dir.x].occupied = True
         self.board[y + dir.y][x + dir.x].connections.append(dir.invert())
+        self.num_filled += 1
 
     # Given a coordinate of an empty square, tries to connect it to a
     # randomly-selected neighboring filled square.
@@ -493,7 +500,7 @@ class Board(object):
 
     def fill_board_randomly(self):
         failures = 0
-        while failures < 10:
+        while self.density() < 0.9 or failures < 10:
             x = random.randint(0, self.width - 1)
             y = random.randint(0, self.height - 1)
             if self.board[y][x].occupied:
@@ -618,7 +625,7 @@ if __name__ == "__main__":
         dest="n",
         type=int,
         default=0,
-        help="the number of groups to start with (default is area/5)",
+        help="the number of neighborhoods to use (default is area/5)",
     )
     parser.add_argument(
         "--seed",
@@ -647,17 +654,23 @@ if __name__ == "__main__":
         default="none",
         help="fill color of the strokes (none)",
     )
+    parser.add_argument(
+        "--nosolo",
+        dest="nosolo",
+        default=False,
+        action="store_true",
+        help="don't allow neighborhoods of only one cell",
+    )
 
     args = parser.parse_args()
 
     if args.seed != 0:
         random.seed(args.seed)
-    drawing = Board(width=args.width, height=args.height, nseeds=args.n)
+    drawing = Board(width=args.width, height=args.height, neighborhoods=args.n)
     drawing.generate_lattice()
     drawing.fill_board_randomly()
-    # drawing.print_board()
-    # drawing.erase_solo_squares()
-    # drawing.print_board()
+    if args.nosolo:
+        drawing.erase_solo_squares()
     drawing.fill_board_iteratively()
     if args.printboard:
         drawing.print_board()
