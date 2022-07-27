@@ -24,37 +24,10 @@ class Direction(object):
         return self.__str__()
 
 
-# our grid is either 4 lines or 6 per square (changes the ratio of figure to ground)
-# SIZE = 4
-GRID = 12
-S = GRID
-SIZE = GRID
-# "FAT", "THIN", "MEDIUM"
-ASPECT = "MEDIUM"
-if ASPECT == "THIN":
-    A = 0
-    B = 4
-    C = 6
-    D = 8
-if ASPECT == "MEDIUM":
-    A = 0
-    B = 3
-    C = 6
-    D = 9
-if ASPECT == "FAT":
-    A = 0
-    B = 2
-    C = 6
-    D = 10
-
-
 NORTH = Direction(x=0, y=-1)
 EAST = Direction(x=1, y=0)
 SOUTH = Direction(x=0, y=1)
 WEST = Direction(x=-1, y=0)
-
-# the order of these matters later
-directions = [NORTH, SOUTH, EAST, WEST]
 
 # A map of these shortcut coordinates
 # makes it easier to see how things work.
@@ -65,22 +38,55 @@ directions = [NORTH, SOUTH, EAST, WEST]
 # W1 SW SC SE E2
 #    S2    S1
 
-N1 = (B, A)
-N2 = (D, A)
-E1 = (S, B)
-E2 = (S, D)
-S1 = (D, S)
-S2 = (B, S)
-W1 = (A, D)
-W2 = (A, B)
-NC = (C, B)
-EC = (D, C)
-SC = (C, D)
-WC = (B, C)
-NW = (B, B)
-NE = (D, B)
-SW = (B, D)
-SE = (D, D)
+
+class Grid(object):
+    def __init__(self, aspect):
+        # the order of these matters later
+        self.directions = [NORTH, SOUTH, EAST, WEST]
+        self.size = 12
+        self.S = self.size
+        if aspect == "thin":
+            self.A = 0
+            self.B = 4
+            self.C = 6
+            self.D = 8
+        if aspect == "medium":
+            self.A = 0
+            self.B = 3
+            self.C = 6
+            self.D = 9
+        if aspect == "wide":
+            self.A = 0
+            self.B = 2
+            self.C = 6
+            self.D = 10
+        self.setup_shortcuts()
+
+    def setup_shortcuts(self):
+        self.shortcuts = dict(
+            N1=(self.B, self.A),
+            N2=(self.D, self.A),
+            E1=(self.S, self.B),
+            E2=(self.S, self.D),
+            S1=(self.D, self.S),
+            S2=(self.B, self.S),
+            W1=(self.A, self.D),
+            W2=(self.A, self.B),
+            NC=(self.C, self.B),
+            EC=(self.D, self.C),
+            SC=(self.C, self.D),
+            WC=(self.B, self.C),
+            NW=(self.B, self.B),
+            NE=(self.D, self.B),
+            SW=(self.B, self.D),
+            SE=(self.D, self.D),
+        )
+
+    def parse(self, cmd, x, y):
+        parts = cmd.split(" ")
+        vals = [self.shortcuts[sc] for sc in parts[1:]]
+        pts = [Point(int(v[0]) + x, int(v[1]) + y) for v in vals]
+        return parts[0], pts
 
 
 class Point(object):
@@ -129,9 +135,10 @@ class Segment(object):
 
 # strokes must be constructed in clockwise order so that they can be joined
 class Stroke(object):
-    def __init__(self, x, y):
-        self.x = x * S
-        self.y = y * S
+    def __init__(self, grid, x, y):
+        self.grid = grid
+        self.x = x * grid.size
+        self.y = y * grid.size
         self.segments = []
 
     def __str__(self):
@@ -144,20 +151,15 @@ class Stroke(object):
         self.segments.append(Segment(op=elt, fr=start, to=end, ctr=ctr))
 
     # expect start and end to be simple pairs here, and add them to our xy
-    def add(self, elt, start, end, ctr=None):
-        if ctr is not None:
-            self.add_element(
-                elt,
-                start=Point(start[0] + self.x, start[1] + self.y),
-                end=Point(end[0] + self.x, end[1] + self.y),
-                ctr=Point(ctr[0] + self.x, ctr[1] + self.y),
-            )
+    def add(self, cmd):
+        elt, pts = self.grid.parse(cmd, self.x, self.y)
+        if len(pts) == 3:
+            self.add_element(elt, start=pts[0], end=pts[1], ctr=pts[2])
+        elif len(pts) == 2:
+            self.add_element(elt, start=pts[0], end=pts[1])
         else:
-            self.add_element(
-                elt,
-                start=Point(start[0] + self.x, start[1] + self.y),
-                end=Point(end[0] + self.x, end[1] + self.y),
-            )
+            print(f"wrong number of args in {cmd}")
+            sys.exit(1)
         return self
 
     def fr(self):
@@ -229,13 +231,9 @@ def optimize_strokes(input):
     return closed
 
 
-class ClosedLoop(object):
-    def __init__(self):
-        self.segments = []
-
-
 class Square(object):
-    def __init__(self, x, y):
+    def __init__(self, grid, x, y):
+        self.grid = grid
         self.x = x
         self.y = y
         self.occupied = False
@@ -261,11 +259,11 @@ class Square(object):
     def connect_0(self):
         if DEBUG:
             (f"connect_0({self.x}, {self.y})")
-        s = Stroke(self.x, self.y)
-        s.add("arc", NC, EC, NE)
-        s.add("arc", EC, SC, SE)
-        s.add("arc", SC, WC, SW)
-        s.add("arc", WC, NC, NW)
+        s = Stroke(self.grid, self.x, self.y)
+        s.add("arc NC EC NE")
+        s.add("arc EC SC SE")
+        s.add("arc SC WC SW")
+        s.add("arc WC NC NW")
         self.strokes = [s]
 
     # creates an endcap that connects in the given direction
@@ -274,27 +272,27 @@ class Square(object):
         if DEBUG:
             print(f"connect_1({self.x}, {self.y})")
         conns = self.conns()
-        s = Stroke(self.x, self.y)
+        s = Stroke(self.grid, self.x, self.y)
         if conns == "N":
-            s.add("line", N1, WC)
-            s.add("arc", WC, SC, SW)
-            s.add("arc", SC, EC, SE)
-            s.add("line", EC, N2)
+            s.add("line N1 WC")
+            s.add("arc WC SC SW")
+            s.add("arc SC EC SE")
+            s.add("line EC N2")
         elif conns == "S":
-            s.add("line", S1, EC)
-            s.add("arc", EC, NC, NE)
-            s.add("arc", NC, WC, NW)
-            s.add("line", WC, S2)
+            s.add("line S1 EC")
+            s.add("arc EC NC NE")
+            s.add("arc NC WC NW")
+            s.add("line WC S2")
         elif conns == "E":
-            s.add("line", E1, NC)
-            s.add("arc", NC, WC, NW)
-            s.add("arc", WC, SC, SW)
-            s.add("line", SC, E2)
+            s.add("line E1 NC")
+            s.add("arc NC WC NW")
+            s.add("arc WC SC SW")
+            s.add("line SC E2")
         elif conns == "W":
-            s.add("line", W1, SC)
-            s.add("arc", SC, EC, SE)
-            s.add("arc", EC, NC, NE)
-            s.add("line", NC, W2)
+            s.add("line W1 SC")
+            s.add("arc SC EC SE")
+            s.add("arc EC NC NE")
+            s.add("line NC W2")
 
         self.strokes = [s]
 
@@ -308,49 +306,49 @@ class Square(object):
         if conns == "NS":
             # straight up/down
             self.strokes = [
-                Stroke(self.x, self.y).add("line", N1, S2),
-                Stroke(self.x, self.y).add("line", S1, N2),
+                Stroke(self.grid, self.x, self.y).add("line N1 S2"),
+                Stroke(self.grid, self.x, self.y).add("line S1 N2"),
             ]
         elif conns == "NE":
             # outer arc from N to E
-            s = Stroke(self.x, self.y)
-            s.add("line", N1, WC)
-            s.add("arc", WC, SC, SW)
-            s.add("line", SC, E2)
+            s = Stroke(self.grid, self.x, self.y)
+            s.add("line N1 WC")
+            s.add("arc WC SC SW")
+            s.add("line SC E2")
             self.strokes.append(s)
             # inner arc from E to N
-            self.strokes.append(Stroke(self.x, self.y).add("arc", E1, N2, NE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc E1 N2 NE"))
         elif conns == "NW":
             # inner arc from N to W
-            self.strokes.append(Stroke(self.x, self.y).add("arc", N1, W2, NW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc N1 W2 NW"))
             # outer arc from W to N
-            s = Stroke(self.x, self.y)
-            s.add("line", W1, SC)
-            s.add("arc", SC, EC, SE)
-            s.add("line", EC, N2)
+            s = Stroke(self.grid, self.x, self.y)
+            s.add("line W1 SC")
+            s.add("arc SC EC SE")
+            s.add("line EC N2")
             self.strokes.append(s)
         elif conns == "SW":
             # outer arc from S to W
-            s = Stroke(self.x, self.y)
-            s.add("line", S1, EC)
-            s.add("arc", EC, NC, NE)
-            s.add("line", NC, W2)
+            s = Stroke(self.grid, self.x, self.y)
+            s.add("line S1 EC")
+            s.add("arc EC NC NE")
+            s.add("line NC W2")
             self.strokes.append(s)
             # inner arc from W to S
-            self.strokes.append(Stroke(self.x, self.y).add("arc", W1, S2, SW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc W1 S2 SW"))
         elif conns == "SE":
             # inner arc from S to E
-            self.strokes.append(Stroke(self.x, self.y).add("arc", S1, E2, SE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc S1 E2 SE"))
             # outer arc from E to S
-            s = Stroke(self.x, self.y)
-            s.add("line", E1, NC)
-            s.add("arc", NC, WC, NW)
-            s.add("line", WC, S2)
+            s = Stroke(self.grid, self.x, self.y)
+            s.add("line E1 NC")
+            s.add("arc NC WC NW")
+            s.add("line WC S2")
             self.strokes.append(s)
         elif conns == "EW":
             # all that's left is an east-west line
-            self.strokes.append(Stroke(self.x, self.y).add("line", E1, W2))
-            self.strokes.append(Stroke(self.x, self.y).add("line", W1, E2))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line E1 W2"))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line W1 E2"))
         else:
             print(f"invalid conns in connect_2, {conns}")
             sys.exit(1)
@@ -364,32 +362,32 @@ class Square(object):
         conns = self.conns()
         if conns == "NSE":
             # straight NS on the W
-            self.strokes.append(Stroke(self.x, self.y).add("line", N1, S2))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line N1 S2"))
             # inner arc from E to N
-            self.strokes.append(Stroke(self.x, self.y).add("arc", E1, N2, NE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc E1 N2 NE"))
             # inner arc from S to E
-            self.strokes.append(Stroke(self.x, self.y).add("arc", S1, E2, SE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc S1 E2 SE"))
         elif conns == "NSW":
             # straight up/down on the E
-            self.strokes.append(Stroke(self.x, self.y).add("line", S1, N2))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line S1 N2"))
             # inner arc from N to W
-            self.strokes.append(Stroke(self.x, self.y).add("arc", N1, W2, NW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc N1 W2 NW"))
             # inner arc from W to S
-            self.strokes.append(Stroke(self.x, self.y).add("arc", W1, S2, SW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc W1 S2 SW"))
         elif conns == "NEW":
             # straight EW on the S side
-            self.strokes.append(Stroke(self.x, self.y).add("line", W1, E2))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line W1 E2"))
             # inner arc from N to W
-            self.strokes.append(Stroke(self.x, self.y).add("arc", N1, W2, NW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc N1 W2 NW"))
             # inner arc from E to N
-            self.strokes.append(Stroke(self.x, self.y).add("arc", E1, N2, NE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc E1 N2 NE"))
         elif conns == "SEW":
             # straight EW on the N side
-            self.strokes.append(Stroke(self.x, self.y).add("line", E1, W2))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("line E1 W2"))
             # inner arc from W to S
-            self.strokes.append(Stroke(self.x, self.y).add("arc", W1, S2, SW))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc W1 S2 SW"))
             # inner arc from S to E
-            self.strokes.append(Stroke(self.x, self.y).add("arc", S1, E2, SE))
+            self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc S1 E2 SE"))
         else:
             print(f"invalid conns in connect_3, {conns}")
             sys.exit(1)
@@ -401,13 +399,13 @@ class Square(object):
         self.strokes = []
         # just 4 arcs
         # inner arc from N to W
-        self.strokes.append(Stroke(self.x, self.y).add("arc", N1, W2, NW))
+        self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc N1 W2 NW"))
         # inner arc from W to S
-        self.strokes.append(Stroke(self.x, self.y).add("arc", W1, S2, SW))
+        self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc W1 S2 SW"))
         # inner arc from S to W
-        self.strokes.append(Stroke(self.x, self.y).add("arc", S1, E2, SE))
+        self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc S1 E2 SE"))
         # inner arc from W to N
-        self.strokes.append(Stroke(self.x, self.y).add("arc", E1, N2, NE))
+        self.strokes.append(Stroke(self.grid, self.x, self.y).add("arc E1 N2 NE"))
 
     def get_strokes(self):
         n = len(self.connections)
@@ -433,7 +431,8 @@ class Square(object):
 
 
 class Board(object):
-    def __init__(self, width=20, height=20, neighborhoods=0):
+    def __init__(self, grid, width=20, height=20, neighborhoods=0):
+        self.grid = grid
         self.width = width
         self.height = height
         self.num_filled = 0
@@ -451,7 +450,7 @@ class Board(object):
         for y in range(self.height):
             self.board.append([])
             for x in range(self.width):
-                self.board[y].append(Square(x, y))
+                self.board[y].append(Square(grid, x, y))
 
     def generate_lattice(self):
         self.empty_board()
@@ -488,7 +487,7 @@ class Board(object):
     # randomly-selected neighboring filled square.
     # Returns true if it succeeds.
     def try_connect(self, x, y):
-        trial_order = sorted(directions, key=lambda a: random.random())
+        trial_order = sorted(self.grid.directions, key=lambda a: random.random())
         for dir in trial_order:
             if self.can_connect(x, y, dir):
                 assert self.board[y][x].occupied == False
@@ -565,7 +564,9 @@ class Board(object):
         closed = optimize_strokes(all_strokes)
         return closed
 
-    def save_svg(self, filename, cellsize, width, height, bordersize, fillcolor):
+    def save_svg(
+        self, filename, gridsize, cellsize, width, height, bordersize, fillcolor
+    ):
         print(
             f"writing {width}x{height} grid to "
             f"{filename} with "
@@ -573,7 +574,7 @@ class Board(object):
         )
         strokes = self.generate_strokes()
         doc = SVGDoc(filename)
-        size = cellsize * SIZE
+        size = cellsize * gridsize
         pagewidth = size * width + 2 * bordersize + 2
         pageheight = size * height + 2 * bordersize + 2
         doc.setPageSize([pagewidth, pageheight])
@@ -661,12 +662,22 @@ if __name__ == "__main__":
         action="store_true",
         help="don't allow neighborhoods of only one cell",
     )
+    parser.add_argument(
+        "--style",
+        dest="style",
+        default="medium",
+        choices=["wide", "medium", "thin"],
+        help="style of the strokes",
+    )
 
     args = parser.parse_args()
 
     if args.seed != 0:
         random.seed(args.seed)
-    drawing = Board(width=args.width, height=args.height, neighborhoods=args.n)
+    grid = Grid(args.style)
+    drawing = Board(
+        grid=grid, width=args.width, height=args.height, neighborhoods=args.n
+    )
     drawing.generate_lattice()
     drawing.fill_board_randomly()
     if args.nosolo:
@@ -682,6 +693,7 @@ if __name__ == "__main__":
 
     drawing.save_svg(
         args.filename,
+        grid.size,
         args.cellsize,
         args.width,
         args.height,
